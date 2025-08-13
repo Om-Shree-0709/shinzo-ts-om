@@ -41,3 +41,5 @@ export type {
   ObservabilityInstance,
   TelemetryConfig,
 } from './types'
+
+export type { UserFeedback, ElicitationSession } from './elicitation'
