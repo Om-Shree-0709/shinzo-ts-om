@@ -1,3 +1,5 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp'
+
 export class MockMcpServer {
   name: string
   version: string

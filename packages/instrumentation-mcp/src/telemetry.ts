@@ -7,10 +7,11 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http'
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics'
 import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base'
-import { TelemetryConfig, ObservabilityInstance } from './types'
+import { TelemetryConfig, ObservabilityInstance, ConsentStatus, ConsentPreferences } from './types'
 import { ConfigValidator, DEFAULT_CONFIG } from './config'
 import { PIISanitizer } from './sanitizer'
 import { generateUuid } from './utils'
+import { globalElicitationState, ElicitationManager } from './elicitation'
 
 export class TelemetryManager implements ObservabilityInstance {
   private sdk: NodeSDK | undefined
@@ -21,6 +22,7 @@ export class TelemetryManager implements ObservabilityInstance {
   private sessionId: string
   private sessionStart: number
   private isInitialized: boolean = false
+  private elicitationManager: ElicitationManager
 
   constructor(config: TelemetryConfig) {
     ConfigValidator.validate(config)
@@ -28,6 +30,12 @@ export class TelemetryManager implements ObservabilityInstance {
     this.config = { ...DEFAULT_CONFIG, ...config }
     this.sessionId = generateUuid()
     this.sessionStart = Date.now()
+    this.elicitationManager = new ElicitationManager()
+
+    // Initialize global elicitation state if configured
+    if (this.config.elicitation) {
+      globalElicitationState.initialize(this.config.elicitation)
+    }
 
     if (this.config.enablePIISanitization) {
       this.piiSanitizer = config.PIISanitizer || new PIISanitizer()
@@ -208,5 +216,14 @@ export class TelemetryManager implements ObservabilityInstance {
     this.recordSessionDuration()
 
     if (this.sdk) await this.sdk.shutdown()
+  }
+
+  // Elicitation methods
+  public getConsentStatus(): ConsentStatus | null {
+    return globalElicitationState.getConsentStatus()
+  }
+
+  public async updateConsent(preferences: ConsentPreferences): Promise<void> {
+    await this.elicitationManager.processConsent(preferences)
   }
 }

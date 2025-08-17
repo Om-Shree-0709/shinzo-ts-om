@@ -27,9 +27,6 @@ const telemetryConfig: TelemetryConfig = {
   enableArgumentCollection: true // Enable argument collection for telemetry
 }
 
-// Initialize telemetry
-const telemetry = instrumentServer(server, telemetryConfig)
-
 // Add tools using the tool method
 server.tool("add_numbers",
   "Adds a list of numbers together",
@@ -87,14 +84,17 @@ server.tool("create_story",
   }
 )
 
-// Handle shutdown gracefully
-process.on('SIGINT', async () => {
-  await telemetry.shutdown()
-  process.exit(0)
-})
-
 // Start server
 async function main() {
+  // Initialize telemetry
+  const telemetry = await instrumentServer(server, telemetryConfig)
+  
+  // Handle shutdown gracefully
+  process.on('SIGINT', async () => {
+    await telemetry.shutdown()
+    process.exit(0)
+  })
+  
   const transport = new StdioServerTransport()
   await server.connect(transport)
   // MCP servers should not log to stdout as it interferes with JSON communication

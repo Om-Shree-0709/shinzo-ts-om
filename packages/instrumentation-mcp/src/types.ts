@@ -22,6 +22,8 @@ export interface TelemetryConfig {
   enableTracing?: boolean
   batchTimeoutMs?: number
   PIISanitizer?: PIISanitizer
+  // Elicitation configuration
+  elicitation?: ElicitationConfig
 }
 
 export interface AuthConfig {
@@ -38,4 +40,31 @@ export interface ObservabilityInstance {
   getIncrementCounter(name: string, options: MetricOptions): (value: number, attributes?: Record<string, any>) => void
   processTelemetryAttributes(data: any): any
   shutdown(): Promise<void>
+  // Elicitation methods
+  getConsentStatus(): ConsentStatus | null
+  updateConsent(preferences: ConsentPreferences): Promise<void>
+}
+
+// Elicitation types
+export interface ElicitationConfig {
+  enabled?: boolean
+  mode?: 'startup' | 'first-request' | 'disabled'
+  fallbackBehavior?: 'deny-all' | 'allow-basic' | 'use-defaults'
+  requireReconsentAfter?: number // days
+}
+
+export interface ConsentPreferences {
+  enableTracing: boolean
+  enableMetrics: boolean
+  enableArgumentCollection: boolean
+  enablePIISanitization: boolean
+  samplingRate: number
+  [key: string]: any
+}
+
+export interface ConsentStatus {
+  sessionId: string
+  timestamp: number
+  preferences: ConsentPreferences
+  isValid: boolean
 }

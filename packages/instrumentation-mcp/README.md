@@ -42,7 +42,7 @@ const telemetryConfig: TelemetryConfig = {
 }
 
 // Initialize telemetry
-const telemetry = instrumentServer(server, telemetryConfig)
+const telemetry = await instrumentServer(server, telemetryConfig)
 
 // Add tools using the tool method
 server.tool(...)
@@ -86,7 +86,7 @@ const telemetryConfig: TelemetryConfig = {
   ]
 }
 
-const telemetry = instrumentServer(server, telemetryConfig)
+const telemetry = await instrumentServer(server, telemetryConfig)
 
 // Add tools using the tool method
 server.tool(...)
@@ -98,45 +98,59 @@ The `TelemetryConfig` interface provides comprehensive configuration options for
 
 ### TelemetryConfig Properties
 
-| Property | Type | Required | Default | Description |
-|----------|------|----------|---------|-------------|
-| `serverName` | `string` | ✅ | - | Name of the MCP server |
-| `serverVersion` | `string` | ✅ | - | Version of the MCP server |
-| `exporterEndpoint` | `string` | ⚠️ | - | OpenTelemetry collector OTLP endpoint URL (required unless using console exporter) |
-| `exporterAuth` | `ExporterAuth` | ❌ | - | Authentication configuration for the exporter |
-| `samplingRate` | `number` | ❌ | `1.0` | Trace sampling rate (0.0 to 1.0) |
-| `metricExportIntervalMs` | `number` | ❌ | `5000` | Metric export interval in milliseconds |
-| `enablePIISanitization` | `boolean` | ❌ | `true` | Enable automatic PII sanitization |
-| `enableArgumentCollection` | `boolean` | ❌ | `false` | Enable collection of tool arguments in traces |
-| `dataProcessors` | `((data: any) => any)[]` | ❌ | `[]` | Array of custom data processing functions |
-| `exporterType` | `'otlp-http' \| 'otlp-grpc' \| 'console'` | ❌ | `'otlp-http'` | Type of telemetry exporter |
-| `enableMetrics` | `boolean` | ❌ | `true` | Enable metrics collection |
-| `enableTracing` | `boolean` | ❌ | `true` | Enable tracing collection |
-| `batchTimeoutMs` | `number` | ❌ | `2000` | Batch timeout in milliseconds |
-| `PIISanitizer` | `PIISanitizer` | ❌ | - | Custom PII sanitizer instance |
+| Property                   | Type                                      | Required | Default       | Description                                                                        |
+| -------------------------- | ----------------------------------------- | -------- | ------------- | ---------------------------------------------------------------------------------- |
+| `serverName`               | `string`                                  | ✅       | -             | Name of the MCP server                                                             |
+| `serverVersion`            | `string`                                  | ✅       | -             | Version of the MCP server                                                          |
+| `exporterEndpoint`         | `string`                                  | ⚠️       | -             | OpenTelemetry collector OTLP endpoint URL (required unless using console exporter) |
+| `exporterAuth`             | `ExporterAuth`                            | ❌       | -             | Authentication configuration for the exporter                                      |
+| `samplingRate`             | `number`                                  | ❌       | `1.0`         | Trace sampling rate (0.0 to 1.0)                                                   |
+| `metricExportIntervalMs`   | `number`                                  | ❌       | `5000`        | Metric export interval in milliseconds                                             |
+| `enablePIISanitization`    | `boolean`                                 | ❌       | `true`        | Enable automatic PII sanitization                                                  |
+| `enableArgumentCollection` | `boolean`                                 | ❌       | `false`       | Enable collection of tool arguments in traces                                      |
+| `dataProcessors`           | `((data: any) => any)[]`                  | ❌       | `[]`          | Array of custom data processing functions                                          |
+| `exporterType`             | `'otlp-http' \| 'otlp-grpc' \| 'console'` | ❌       | `'otlp-http'` | Type of telemetry exporter                                                         |
+| `enableMetrics`            | `boolean`                                 | ❌       | `true`        | Enable metrics collection                                                          |
+| `enableTracing`            | `boolean`                                 | ❌       | `true`        | Enable tracing collection                                                          |
+| `batchTimeoutMs`           | `number`                                  | ❌       | `2000`        | Batch timeout in milliseconds                                                      |
+| `PIISanitizer`             | `PIISanitizer`                            | ❌       | -             | Custom PII sanitizer instance                                                      |
+| `elicitation`              | `ElicitationConfig`                       | ❌       | -             | User consent elicitation configuration                                             |
 
 ### ExporterAuth Configuration
 
 The `exporterAuth` property supports multiple authentication methods:
 
-| Auth Type | Properties | Description |
-|-----------|------------|-------------|
-| `bearer` | `token: string` | Bearer token authentication |
-| `apiKey` | `apiKey: string` | API key authentication |
-| `basic` | `username: string, password: string` | Basic HTTP authentication |
+| Auth Type | Properties                           | Description                 |
+| --------- | ------------------------------------ | --------------------------- |
+| `bearer`  | `token: string`                      | Bearer token authentication |
+| `apiKey`  | `apiKey: string`                     | API key authentication      |
+| `basic`   | `username: string, password: string` | Basic HTTP authentication   |
+
+### ElicitationConfig Configuration
+
+The `elicitation` property enables user consent collection for telemetry:
+
+| Property                | Type                                            | Required | Default          | Description                             |
+| ----------------------- | ----------------------------------------------- | -------- | ---------------- | --------------------------------------- |
+| `enabled`               | `boolean`                                       | ❌       | `false`          | Enable elicitation functionality        |
+| `mode`                  | `'startup' \| 'first-request' \| 'disabled'`    | ❌       | `'disabled'`     | When to request consent                 |
+| `fallbackBehavior`      | `'deny-all' \| 'allow-basic' \| 'use-defaults'` | ❌       | `'use-defaults'` | Behavior when elicitation fails         |
+| `requireReconsentAfter` | `number`                                        | ❌       | -                | Days after which re-consent is required |
 
 ### Usage Examples
 
 #### Minimal Configuration
+
 ```typescript
 const telemetryConfig: TelemetryConfig = {
   serverName: "my-server",
   serverVersion: "1.0.0",
-  exporterEndpoint: "http://localhost:4318/v1" // OpenTelemetry collector endpoint
-}
+  exporterEndpoint: "http://localhost:4318/v1", // OpenTelemetry collector endpoint
+};
 ```
 
 #### Bearer Token Authentication
+
 ```typescript
 const telemetryConfig: TelemetryConfig = {
   serverName: "my-server",
@@ -144,12 +158,13 @@ const telemetryConfig: TelemetryConfig = {
   exporterEndpoint: "https://api.example.com/v1",
   exporterAuth: {
     type: "bearer",
-    token: process.env.OTEL_AUTH_TOKEN
-  }
-}
+    token: process.env.OTEL_AUTH_TOKEN,
+  },
+};
 ```
 
 #### Custom Data Processing
+
 ```typescript
 const telemetryConfig: TelemetryConfig = {
   serverName: "my-server",
@@ -158,24 +173,61 @@ const telemetryConfig: TelemetryConfig = {
   dataProcessors: [
     (data) => {
       // Remove sensitive parameters
-      if (data['mcp.tool.name'] === 'sensitive_tool') {
-        delete data['mcp.request.argument.password']
+      if (data["mcp.tool.name"] === "sensitive_tool") {
+        delete data["mcp.request.argument.password"];
       }
-      return data
-    }
-  ]
-}
+      return data;
+    },
+  ],
+};
 ```
 
 #### Console Development Setup
+
 ```typescript
 const telemetryConfig: TelemetryConfig = {
   serverName: "my-server",
   serverVersion: "1.0.0",
   exporterType: "console",
   enableMetrics: false, // Console exporter doesn't support metrics
-  samplingRate: 1.0 // Sample all traces in development
+  samplingRate: 1.0, // Sample all traces in development
+};
+```
+
+#### User Consent Elicitation
+
+```typescript
+const telemetryConfig: TelemetryConfig = {
+  serverName: "my-server",
+  serverVersion: "1.0.0",
+  exporterEndpoint: "http://localhost:4318/v1",
+
+  // Enable user consent elicitation
+  elicitation: {
+    enabled: true,
+    mode: "startup", // Request consent when server starts
+    fallbackBehavior: "allow-basic", // Allow basic telemetry if elicitation fails
+    requireReconsentAfter: 30, // Require re-consent after 30 days
+  },
+};
+
+// Initialize telemetry (now async due to elicitation)
+const telemetry = await instrumentServer(server, telemetryConfig);
+
+// Check consent status
+const consentStatus = telemetry.getConsentStatus();
+if (consentStatus) {
+  console.log("User consent:", consentStatus.preferences);
 }
+
+// Update consent preferences
+await telemetry.updateConsent({
+  enableTracing: true,
+  enableMetrics: true,
+  enableArgumentCollection: false,
+  enablePIISanitization: true,
+  samplingRate: 0.5,
+});
 ```
 
 ## Features

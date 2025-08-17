@@ -1,11 +1,21 @@
 
 import { TelemetryManager } from '../src/telemetry'
-import { TelemetryConfig } from '../src/types'
+import { TelemetryConfig, ConsentPreferences } from '../src/types'
+import { globalElicitationState } from '../src/elicitation'
 
 describe('TelemetryManager', () => {
   let telemetryManager: TelemetryManager
   let mockConfig: TelemetryConfig
   beforeEach(() => {
+    // Reset global elicitation state
+    globalElicitationState.clearConsentStatus()
+    
+    // Reset global state configuration
+    globalElicitationState.initialize({
+      enabled: false,
+      mode: 'disabled',
+      fallbackBehavior: 'use-defaults'
+    })
 
     mockConfig = {
       serverName: 'test-service',
@@ -322,6 +332,79 @@ describe('TelemetryManager', () => {
       
       expect(manager.getArgumentAttributes(null)).toEqual({})
       expect(manager.getArgumentAttributes(undefined)).toEqual({})
+    })
+  })
+
+  describe('elicitation integration', () => {
+    it('should initialize global elicitation state when config includes elicitation', () => {
+      const configWithElicitation: TelemetryConfig = {
+        ...mockConfig,
+        elicitation: {
+          enabled: true,
+          mode: 'startup',
+          fallbackBehavior: 'allow-basic',
+          requireReconsentAfter: 30
+        }
+      }
+
+      const manager = new TelemetryManager(configWithElicitation)
+      
+      expect(globalElicitationState.isElicitationEnabled()).toBe(true)
+      expect(globalElicitationState.getMode()).toBe('startup')
+      expect(globalElicitationState.getFallbackBehavior()).toBe('allow-basic')
+    })
+
+    it('should not initialize global elicitation state when config does not include elicitation', () => {
+      const manager = new TelemetryManager(mockConfig)
+      
+      expect(globalElicitationState.isElicitationEnabled()).toBe(false)
+    })
+
+    it('should get consent status from global state', () => {
+      const consentStatus = telemetryManager.getConsentStatus()
+      expect(consentStatus).toBeNull()
+
+      // Set consent status in global state
+      const testPreferences: ConsentPreferences = {
+        enableTracing: true,
+        enableMetrics: false,
+        enableArgumentCollection: true,
+        enablePIISanitization: true,
+        samplingRate: 0.5
+      }
+
+      globalElicitationState.setConsentStatus({
+        sessionId: 'test-session',
+        timestamp: Date.now(),
+        preferences: testPreferences,
+        isValid: true
+      })
+
+      const retrievedStatus = telemetryManager.getConsentStatus()
+      expect(retrievedStatus).toBeDefined()
+      expect(retrievedStatus?.preferences).toEqual(testPreferences)
+    })
+
+    it('should update consent through elicitation manager', async () => {
+      const testPreferences: ConsentPreferences = {
+        enableTracing: false,
+        enableMetrics: true,
+        enableArgumentCollection: false,
+        enablePIISanitization: true,
+        samplingRate: 0.1
+      }
+
+      await telemetryManager.updateConsent(testPreferences)
+
+      const consentStatus = globalElicitationState.getConsentStatus()
+      expect(consentStatus).toBeDefined()
+      expect(consentStatus?.preferences).toEqual(testPreferences)
+      expect(consentStatus?.isValid).toBe(true)
+    })
+
+    it('should create elicitation manager instance', () => {
+      const manager = new TelemetryManager(mockConfig)
+      expect((manager as any).elicitationManager).toBeDefined()
     })
   })
 })

@@ -5,12 +5,25 @@ import { TelemetryConfig } from '../src/types'
 const mockTelemetryManager = {
   shutdown: jest.fn().mockResolvedValue(undefined),
   createSpan: jest.fn().mockReturnValue({ end: jest.fn() }),
-  recordMetric: jest.fn()
+  recordMetric: jest.fn(),
+  getConsentStatus: jest.fn().mockReturnValue(null),
+  updateConsent: jest.fn().mockResolvedValue(undefined)
 }
 
 const mockInstrumentation = {
   instrument: jest.fn(),
   uninstrument: jest.fn()
+}
+
+const mockElicitationManager = {
+  requestConsent: jest.fn().mockResolvedValue({
+    enableTracing: true,
+    enableMetrics: true,
+    enableArgumentCollection: false,
+    enablePIISanitization: true,
+    samplingRate: 0.1
+  }),
+  processConsent: jest.fn().mockResolvedValue(undefined)
 }
 
 jest.doMock('../src/telemetry', () => ({
@@ -19,6 +32,15 @@ jest.doMock('../src/telemetry', () => ({
 
 jest.doMock('../src/instrumentation', () => ({
   McpServerInstrumentation: jest.fn().mockImplementation(() => mockInstrumentation)
+}))
+
+jest.doMock('../src/elicitation', () => ({
+  globalElicitationState: {
+    initialize: jest.fn(),
+    isElicitationDone: jest.fn().mockReturnValue(false),
+    clearConsentStatus: jest.fn()
+  },
+  ElicitationManager: jest.fn().mockImplementation(() => mockElicitationManager)
 }))
 
 jest.doMock('../src/config', () => ({
@@ -38,6 +60,7 @@ jest.doMock('../src/config', () => ({
 
 // Import after mocking
 const { instrumentServer } = require('../src/index')
+const { globalElicitationState, ElicitationManager } = require('../src/elicitation')
 
 describe('Main Entry Point', () => {
   let mockServer: MockMcpServer
@@ -53,18 +76,73 @@ describe('Main Entry Point', () => {
   })
 
   describe('instrumentServer', () => {
-    it('should return an observability instance', () => {
-      // Just test that the function can be called and returns something
-      expect(() => {
-        const result = instrumentServer(mockServer, mockConfig)
-        expect(result).toBeDefined()
-        expect(typeof result.shutdown).toBe('function')
-      }).not.toThrow()
+    it('should return an observability instance', async () => {
+      const result = await instrumentServer(mockServer, mockConfig)
+      expect(result).toBeDefined()
+      expect(typeof result.shutdown).toBe('function')
+      expect(typeof result.getConsentStatus).toBe('function')
+      expect(typeof result.updateConsent).toBe('function')
     })
 
     it('should handle shutdown without errors', async () => {
-      const result = instrumentServer(mockServer, mockConfig)
+      const result = await instrumentServer(mockServer, mockConfig)
       await expect(result.shutdown()).resolves.not.toThrow()
+    })
+
+    it('should initialize elicitation when configured', async () => {
+      const configWithElicitation = {
+        ...mockConfig,
+        elicitation: {
+          enabled: true,
+          mode: 'startup',
+          fallbackBehavior: 'allow-basic'
+        }
+      }
+      
+      await instrumentServer(mockServer, configWithElicitation)
+      
+      expect(globalElicitationState.initialize).toHaveBeenCalledWith(configWithElicitation.elicitation)
+      expect(ElicitationManager).toHaveBeenCalled()
+    })
+
+    it('should not initialize elicitation when not configured', async () => {
+      await instrumentServer(mockServer, mockConfig)
+      
+      expect(globalElicitationState.initialize).not.toHaveBeenCalled()
+    })
+
+    it('should request consent when elicitation is enabled and not done', async () => {
+      const configWithElicitation = {
+        ...mockConfig,
+        elicitation: {
+          enabled: true,
+          mode: 'startup'
+        }
+      }
+
+      globalElicitationState.isElicitationDone.mockReturnValue(false)
+      
+      await instrumentServer(mockServer, configWithElicitation)
+      
+      expect(mockElicitationManager.requestConsent).toHaveBeenCalled()
+      expect(mockElicitationManager.processConsent).toHaveBeenCalled()
+    })
+
+    it('should not request consent when elicitation is already done', async () => {
+      const configWithElicitation = {
+        ...mockConfig,
+        elicitation: {
+          enabled: true,
+          mode: 'startup'
+        }
+      }
+
+      globalElicitationState.isElicitationDone.mockReturnValue(true)
+      
+      await instrumentServer(mockServer, configWithElicitation)
+      
+      expect(mockElicitationManager.requestConsent).not.toHaveBeenCalled()
+      expect(mockElicitationManager.processConsent).not.toHaveBeenCalled()
     })
   })
 
